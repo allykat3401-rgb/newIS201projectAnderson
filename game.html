@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bodybuilder Fruit Punch</title>
+  <link rel="stylessheet" href="/css/mystyles.css">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #111;
+    }
+
+    canvas {
+      display: block;
+      background: linear-gradient(to top, #232323 0%, #303030 30%, #6b7a8f 100%);
+      cursor: crosshair;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.62);
+      z-index: 10;
+    }
+
+    .panel {
+      width: min(92vw, 560px);
+      background: rgba(20, 20, 20, 0.95);
+      border: 2px solid rgba(255, 255, 255, 0.12);
+      border-radius: 18px;
+      padding: 28px;
+      text-align: center;
+      color: white;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+    }
+
+    .panel h1 {
+      margin-top: 0;
+      font-size: 2rem;
+    }
+
+    .panel p {
+      line-height: 1.5;
+      color: #e8e8e8;
+      margin: 10px 0;
+    }
+
+    .panel button {
+      margin-top: 16px;
+      border: none;
+      border-radius: 12px;
+      padding: 12px 20px;
+      font-size: 1rem;
+      font-weight: bold;
+      background: #ffb000;
+      color: #111;
+      cursor: pointer;
+    }
+
+    .panel button:hover {
+      filter: brightness(1.05);
+    }
+    .game-container {
+  width: 900px;
+  height: 550px;
+  margin: 40px auto; /* centers it */
+  border: 3px solid #333;
+  border-radius: 12px;
+  overflow: hidden;
+  background: black;
+}
+
+canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}   
+  </style>
+</head>
+<body>
+  <div class="game-container">
+     <canvas id="gameCanvas"></canvas>
+  </div>
+
+  <div class="overlay" id="startOverlay">
+    <div class="panel">
+      <h1>Bodybuilder Fruit Punch</h1>
+      <p>Click fruit to punch it for points.</p>
+      <p>Clicking a non-fruit item ends the game.</p>
+      <p>Every 3 fruit hits in a row gives double points on that hit.</p>
+      <p>If a fruit falls off the screen, your streak resets.</p>
+      <button id="startButton">Start Game</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="gameOverOverlay" style="display: none;">
+    <div class="panel">
+      <h1>Game Over</h1>
+      <p id="finalScoreText">Final Score: 0</p>
+      <p id="finalComboText">Best Streak: 0</p>
+      <button id="restartButton">Play Again</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const startOverlay = document.getElementById("startOverlay");
+    const gameOverOverlay = document.getElementById("gameOverOverlay");
+    const startButton = document.getElementById("startButton");
+    const restartButton = document.getElementById("restartButton");
+    const finalScoreText = document.getElementById("finalScoreText");
+    const finalComboText = document.getElementById("finalComboText");
+
+    const fruitTypes = [
+      { name: "Apple", color: "#ff4d4d", stem: true },
+      { name: "Banana", color: "#ffd84d", curved: true },
+      { name: "Orange", color: "#ff9f1c" },
+      { name: "Watermelon", color: "#2ecc71", rind: true },
+      { name: "Grape", color: "#8e44ad", cluster: true }
+    ];
+
+    const dangerTypes = [
+      { name: "Dumbbell", color: "#8d99ae", kind: "dumbbell" },
+      { name: "Pizza", color: "#f4a261", kind: "pizza" },
+      { name: "Soda", color: "#00b4d8", kind: "soda" }
+    ];
+
+    const gameState = {
+      running: false,
+      gameOver: false,
+      score: 0,
+      streak: 0,
+      bestStreak: 0,
+      items: [],
+      groundY: 0,
+      spawnTimer: 0,
+      nextSpawnDelay: 0.6,
+      lastTime: 0
+    };
+
+    const bodybuilder = {
+      x: 0,
+      y: 0,
+      size: 1.8,
+      armReach: 150,
+      leftPunchTimer: 0,
+      rightPunchTimer: 0,
+      leftPunchX: 0,
+      leftPunchY: 0,
+      rightPunchX: 0,
+      rightPunchY: 0
+    };
+
+    function resizeCanvas() {
+  const container = document.querySelector('.game-container');
+  canvas.width = container.clientWidth;
+  canvas.height = container.clientHeight;
+  bodybuilder.x = canvas.width / 2;
+  bodybuilder.y = canvas.height - 175;
+      gameState.groundY = canvas.height - 90;
+      bodybuilder.x = canvas.width / 2;
+      bodybuilder.y = canvas.height - 175;
+    }
+
+    function randomBetween(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function pickRandom(array) {
+      return array[Math.floor(Math.random() * array.length)];
+    }
+
+    function spawnItem() {
+      const spawnFruit = Math.random() < 0.72;
+      const itemType = spawnFruit ? pickRandom(fruitTypes) : pickRandom(dangerTypes);
+
+      const startX = randomBetween(80, canvas.width - 80);
+      const startY = canvas.height + 40;
+      const vx = randomBetween(-120, 120);
+      const vy = -randomBetween(620, 820);
+      const radius = spawnFruit ? randomBetween(28, 38) : randomBetween(30, 40);
+
+      gameState.items.push({
+        type: spawnFruit ? "fruit" : "danger",
+        name: itemType.name,
+        color: itemType.color,
+        kind: itemType.kind || null,
+        cluster: itemType.cluster || false,
+        curved: itemType.curved || false,
+        rind: itemType.rind || false,
+        stem: itemType.stem || false,
+        x: startX,
+        y: startY,
+        vx: vx,
+        vy: vy,
+        radius: radius,
+        hit: false,
+        rotation: randomBetween(0, Math.PI * 2),
+        rotationSpeed: randomBetween(-3, 3)
+      });
+
+      gameState.nextSpawnDelay = randomBetween(0.2, 1.2);
+    }
+
+    function resetGame() {
+      gameState.running = true;
+      gameState.gameOver = false;
+      gameState.score = 0;
+      gameState.streak = 0;
+      gameState.bestStreak = 0;
+      gameState.items = [];
+      gameState.spawnTimer = 0;
+      gameState.nextSpawnDelay = 0.4;
+      gameState.lastTime = 0;
+
+      bodybuilder.leftPunchTimer = 0;
+      bodybuilder.rightPunchTimer = 0;
+
+      for (let i = 0; i < 5; i++) {
+        spawnItem();
+      }
+    }
+
+    function endGame() {
+      gameState.running = false;
+      gameState.gameOver = true;
+      finalScoreText.textContent = `Final Score: ${gameState.score}`;
+      finalComboText.textContent = `Best Streak: ${gameState.bestStreak}`;
+      gameOverOverlay.style.display = "flex";
+    }
+
+    function registerFruitHit() {
+      gameState.streak += 1;
+      if (gameState.streak > gameState.bestStreak) {
+        gameState.bestStreak = gameState.streak;
+      }
+
+      const earnedPoints = gameState.streak % 3 === 0 ? 2 : 1;
+      gameState.score += earnedPoints;
+    }
+
+    function missFruit() {
+      gameState.streak = 0;
+    }
+
+    function update(delta) {
+      if (!gameState.running) return;
+
+      gameState.spawnTimer += delta;
+      if (gameState.spawnTimer >= gameState.nextSpawnDelay) {
+        spawnItem();
+        gameState.spawnTimer = 0;
+      }
+
+      if (bodybuilder.leftPunchTimer > 0) {
+        bodybuilder.leftPunchTimer -= delta;
+      }
+
+      if (bodybuilder.rightPunchTimer > 0) {
+        bodybuilder.rightPunchTimer -= delta;
+      }
+
+      const gravity = 1050;
+
+      for (let i = gameState.items.length - 1; i >= 0; i--) {
+        const item = gameState.items[i];
+        item.vy += gravity * delta;
+        item.x += item.vx * delta;
+        item.y += item.vy * delta;
+        item.rotation += item.rotationSpeed * delta;
+
+        if (item.y - item.radius > canvas.height + 40) {
+          if (!item.hit && item.type === "fruit") {
+            missFruit();
+          }
+          gameState.items.splice(i, 1);
+        }
+      }
+    }
+
+    function drawBackground() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "#202020";
+      ctx.fillRect(0, canvas.height - 90, canvas.width, 90);
+
+      ctx.fillStyle = "#2d2d2d";
+      for (let i = 0; i < canvas.width; i += 50) {
+        ctx.fillRect(i, canvas.height - 90, 25, 90);
+      }
+    }
+
+    function drawBodybuilder() {
+      const x = bodybuilder.x;
+      const y = bodybuilder.y;
+      const s = bodybuilder.size;
+
+      const leftShoulderX = x - 42 * s;
+      const leftShoulderY = y + 10 * s;
+      const rightShoulderX = x + 42 * s;
+      const rightShoulderY = y + 10 * s;
+
+      ctx.strokeStyle = "#111";
+      ctx.lineWidth = 16 * s;
+      ctx.lineCap = "round";
+
+      ctx.beginPath();
+      ctx.moveTo(x, y + 70 * s);
+      ctx.lineTo(x - 25 * s, y + 145 * s);
+      ctx.moveTo(x, y + 70 * s);
+      ctx.lineTo(x + 25 * s, y + 145 * s);
+      ctx.stroke();
+
+      ctx.fillStyle = "#1d3557";
+      ctx.fillRect(x - 40 * s, y - 10 * s, 80 * s, 95 * s);
+
+      ctx.fillStyle = "#274c77";
+      ctx.fillRect(x - 34 * s, y + 5 * s, 28 * s, 18 * s);
+      ctx.fillRect(x + 6 * s, y + 5 * s, 28 * s, 18 * s);
+
+      ctx.beginPath();
+      ctx.fillStyle = "#e0ac69";
+      ctx.arc(x, y - 38 * s, 28 * s, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.fillStyle = "#2b1d0e";
+      ctx.arc(x, y - 45 * s, 28 * s, Math.PI, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "#e0ac69";
+      ctx.lineWidth = 18 * s;
+
+      ctx.beginPath();
+      ctx.moveTo(leftShoulderX, leftShoulderY);
+      if (bodybuilder.leftPunchTimer > 0) {
+        ctx.lineTo(bodybuilder.leftPunchX, bodybuilder.leftPunchY);
+      } else {
+        ctx.lineTo(x - 88 * s, y + 42 * s);
+      }
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(rightShoulderX, rightShoulderY);
+      if (bodybuilder.rightPunchTimer > 0) {
+        ctx.lineTo(bodybuilder.rightPunchX, bodybuilder.rightPunchY);
+      } else {
+        ctx.lineTo(x + 88 * s, y + 42 * s);
+      }
+      ctx.stroke();
+
+      ctx.fillStyle = "#d49358";
+
+      if (bodybuilder.leftPunchTimer > 0) {
+        ctx.beginPath();
+        ctx.arc(bodybuilder.leftPunchX, bodybuilder.leftPunchY, 13 * s, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.arc(x - 88 * s, y + 42 * s, 11 * s, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (bodybuilder.rightPunchTimer > 0) {
+        ctx.beginPath();
+        ctx.arc(bodybuilder.rightPunchX, bodybuilder.rightPunchY, 13 * s, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.arc(x + 88 * s, y + 42 * s, 11 * s, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawFruit(item) {
+      ctx.save();
+      ctx.translate(item.x, item.y);
+      ctx.rotate(item.rotation);
+
+      if (item.cluster) {
+        const offsets = [
+          [-10, -8], [8, -8], [-15, 8], [0, 10], [15, 8]
+        ];
+        ctx.fillStyle = item.color;
+        offsets.forEach(([ox, oy]) => {
+          ctx.beginPath();
+          ctx.arc(ox, oy, item.radius * 0.34, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      } else if (item.curved) {
+        ctx.strokeStyle = item.color;
+        ctx.lineWidth = 16;
+        ctx.beginPath();
+        ctx.arc(0, 0, item.radius * 0.8, 0.2, 2.6);
+        ctx.stroke();
+      } else if (item.rind) {
+        ctx.beginPath();
+        ctx.fillStyle = "#2ecc71";
+        ctx.arc(0, 0, item.radius, 0, Math.PI);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.fillStyle = "#ff5a5f";
+        ctx.arc(0, 0, item.radius * 0.82, 0, Math.PI);
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.fillStyle = item.color;
+        ctx.arc(0, 0, item.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (item.stem) {
+        ctx.strokeStyle = "#4f772d";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(0, -item.radius + 2);
+        ctx.lineTo(4, -item.radius - 10);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    function drawDanger(item) {
+      ctx.save();
+      ctx.translate(item.x, item.y);
+      ctx.rotate(item.rotation);
+
+      if (item.kind === "dumbbell") {
+        ctx.strokeStyle = "#b0b7c3";
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.moveTo(-18, 0);
+        ctx.lineTo(18, 0);
+        ctx.stroke();
+
+        ctx.fillStyle = "#8d99ae";
+        ctx.fillRect(-28, -16, 8, 32);
+        ctx.fillRect(-18, -12, 8, 24);
+        ctx.fillRect(10, -12, 8, 24);
+        ctx.fillRect(20, -16, 8, 32);
+      } else if (item.kind === "pizza") {
+        ctx.beginPath();
+        ctx.moveTo(0, -item.radius);
+        ctx.lineTo(item.radius, item.radius * 0.8);
+        ctx.lineTo(-item.radius, item.radius * 0.8);
+        ctx.closePath();
+        ctx.fillStyle = "#f4d35e";
+        ctx.fill();
+
+        ctx.fillStyle = "#d1495b";
+        ctx.beginPath();
+        ctx.arc(-10, 8, 5, 0, Math.PI * 2);
+        ctx.arc(0, -5, 5, 0, Math.PI * 2);
+        ctx.arc(10, 10, 5, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (item.kind === "soda") {
+        ctx.fillStyle = "#00b4d8";
+        ctx.fillRect(-14, -24, 28, 48);
+
+        ctx.fillStyle = "#caf0f8";
+        ctx.fillRect(-8, -30, 16, 6);
+
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(4, -30);
+        ctx.lineTo(12, -40);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    function drawItems() {
+      gameState.items.forEach(item => {
+        if (item.type === "fruit") {
+          drawFruit(item);
+        } else {
+          drawDanger(item);
+        }
+      });
+    }
+
+    function drawHUD() {
+      ctx.save();
+      ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+      ctx.fillRect(16, canvas.height - 86, 210, 66);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 26px Arial";
+      ctx.fillText(`Score: ${gameState.score}`, 28, canvas.height - 48);
+
+      ctx.font = "18px Arial";
+      ctx.fillStyle = "#ffd166";
+      ctx.fillText(`Streak: ${gameState.streak}`, 28, canvas.height - 22);
+      ctx.restore();
+
+      ctx.save();
+      ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+      ctx.fillRect(canvas.width - 280, 20, 260, 88);
+
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 18px Arial";
+      ctx.fillText("Fruit: Apple, Banana,", canvas.width - 266, 48);
+      ctx.fillText("Orange, Watermelon, Grape", canvas.width - 266, 72);
+
+      ctx.fillStyle = "#ff8fab";
+      ctx.fillText("Hazards: Dumbbell, Pizza, Soda", canvas.width - 266, 96);
+      ctx.restore();
+    }
+
+    function render() {
+      drawBackground();
+      drawItems();
+      drawBodybuilder();
+      drawHUD();
+    }
+
+    function gameLoop(timestamp) {
+      if (!gameState.lastTime) {
+        gameState.lastTime = timestamp;
+      }
+
+      const delta = Math.min((timestamp - gameState.lastTime) / 1000, 0.033);
+      gameState.lastTime = timestamp;
+
+      update(delta);
+      render();
+      requestAnimationFrame(gameLoop);
+    }
+
+    function punchAt(mouseX, mouseY) {
+      const isLeftSide = mouseX < bodybuilder.x;
+      const s = bodybuilder.size;
+
+      if (isLeftSide) {
+        bodybuilder.leftPunchTimer = 0.18;
+        const originX = bodybuilder.x - 42 * s;
+        const originY = bodybuilder.y + 10 * s;
+        const angle = Math.atan2(mouseY - originY, mouseX - originX);
+        bodybuilder.leftPunchX = originX + Math.cos(angle) * bodybuilder.armReach;
+        bodybuilder.leftPunchY = originY + Math.sin(angle) * bodybuilder.armReach;
+      } else {
+        bodybuilder.rightPunchTimer = 0.18;
+        const originX = bodybuilder.x + 42 * s;
+        const originY = bodybuilder.y + 10 * s;
+        const angle = Math.atan2(mouseY - originY, mouseX - originX);
+        bodybuilder.rightPunchX = originX + Math.cos(angle) * bodybuilder.armReach;
+        bodybuilder.rightPunchY = originY + Math.sin(angle) * bodybuilder.armReach;
+      }
+    }
+
+    canvas.addEventListener("click", (event) => {
+      if (!gameState.running) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+
+      punchAt(mouseX, mouseY);
+
+      for (let i = gameState.items.length - 1; i >= 0; i--) {
+        const item = gameState.items[i];
+        const dx = mouseX - item.x;
+        const dy = mouseY - item.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance <= item.radius + 8) {
+          if (item.type === "danger") {
+            endGame();
+            return;
+          }
+
+          if (item.type === "fruit") {
+            registerFruitHit();
+            item.hit = true;
+            gameState.items.splice(i, 1);
+            return;
+          }
+        }
+      }
+    });
+
+    startButton.addEventListener("click", () => {
+      startOverlay.style.display = "none";
+      gameOverOverlay.style.display = "none";
+      resetGame();
+    });
+
+    restartButton.addEventListener("click", () => {
+      gameOverOverlay.style.display = "none";
+      resetGame();
+    });
+
+    window.addEventListener("resize", resizeCanvas);
+
+    resizeCanvas();
+    render();
+    requestAnimationFrame(gameLoop);
+  </script>
+<br><br><br><br><br><br><br><br><br>
+<a class="emphasisedText" rel="text" href="index.html">Home</a>
+</body>
+</html>

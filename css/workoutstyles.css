@@ -1,0 +1,28 @@
+body{
+    color: rgb(89, 89, 89);
+    background-color: rgb(214, 213, 213);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    border: 5px solid black;
+    margin: 35px;
+    padding: 35px;
+}
+
+ol {
+    list-style-type: decimal;
+    padding-left: 40px;
+}
+
+.header{
+    text-align: center;
+    text-decoration: underline;
+    text-decoration: bold;
+    font-size: xxx-large;
+}
+.div{
+    color: rgb(42, 42, 41);
+    font-family: Georgia, 'Times New Roman', Times, serif;
+}
+
+.title{
+    text-align: center;
+}

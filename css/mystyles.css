@@ -1,0 +1,25 @@
+p{
+    font-weight: medium;
+    font-size: xx-large;
+}
+#top{
+    text-decoration: underline;
+}
+
+.emphasizedText{
+    font-style: italic;
+    font-style: bold;
+    color: rgb(74, 74, 74);
+    text-align: center;
+}
+
+body{
+    background-color: rgba(230, 229, 225, 0.564);
+    color: rgb(171, 171, 171);
+    font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif ;
+    text-align: center;
+    border: 5px solid black;
+    margin: 35px;
+    padding: 35px;
+}
+
